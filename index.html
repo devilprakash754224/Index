@@ -1,0 +1,421 @@
+package com.example.localservicefinder;
+
+import android.os.Bundle;
+import android.text.Editable;
+import android.text.TextWatcher;
+import android.text.InputType;
+import android.view.View;
+import android.widget.*;
+
+import androidx.appcompat.app.AlertDialog;
+import androidx.appcompat.app.AppCompatActivity;
+
+import java.util.ArrayList;
+
+public class MainActivity extends AppCompatActivity {
+
+    DBHelper db;
+
+    Spinner categorySpinner;
+    EditText searchBox;
+    ListView providerList;
+
+    ProviderAdapter adapter;
+
+    TextView navHome, navServices, navBookings, navProfile;
+
+    ArrayList<Provider> currentProviders = new ArrayList<>();
+
+    String[] categories = {
+            "All",
+            "Electrician",
+            "Plumber",
+            "Tutor",
+            "Mechanic",
+            "Cleaning"
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+
+        db = new DBHelper(this);
+
+        categorySpinner = findViewById(R.id.categorySpinner);
+        searchBox = findViewById(R.id.searchBox);
+        providerList = findViewById(R.id.providerList);
+
+        navHome = findViewById(R.id.navHome);
+        navServices = findViewById(R.id.navServices);
+        navBookings = findViewById(R.id.navBookings);
+        navProfile = findViewById(R.id.navProfile);
+
+        navHome.setOnClickListener(v ->
+                Toast.makeText(this, "Home Selected",
+                        Toast.LENGTH_SHORT).show()
+        );
+
+        navServices.setOnClickListener(v -> showServices());
+
+        navBookings.setOnClickListener(v -> showBookings());
+
+        navProfile.setOnClickListener(v -> showProfile());
+
+        ArrayAdapter<String> spinnerAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_spinner_item,
+                        categories
+                );
+
+        spinnerAdapter.setDropDownViewResource(
+                android.R.layout.simple_spinner_dropdown_item
+        );
+
+        categorySpinner.setAdapter(spinnerAdapter);
+
+        adapter = new ProviderAdapter();
+        providerList.setAdapter(adapter);
+
+        categorySpinner.setOnItemSelectedListener(
+                new AdapterView.OnItemSelectedListener() {
+
+                    @Override
+                    public void onItemSelected(
+                            AdapterView<?> parent,
+                            View view,
+                            int position,
+                            long id) {
+
+                        loadProviders();
+                    }
+
+                    @Override
+                    public void onNothingSelected(
+                            AdapterView<?> parent) {
+                    }
+                }
+        );
+
+        searchBox.addTextChangedListener(new TextWatcher() {
+
+            @Override
+            public void beforeTextChanged(
+                    CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(
+                    CharSequence s, int start, int before, int count) {
+
+                loadProviders();
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+            }
+        });
+
+        providerList.setOnItemClickListener(
+                (parent, view, position, id) -> {
+
+                    Provider p = getProviderAt(position);
+
+                    if (p != null) {
+                        showProviderDetails(p);
+                    }
+                }
+        );
+
+        loadProviders();
+    }
+
+    // Load Providers
+    private void loadProviders() {
+
+        String category = categorySpinner.getSelectedItem() == null
+                ? "All"
+                : categorySpinner.getSelectedItem().toString();
+
+        String search = searchBox.getText().toString().trim();
+
+        currentProviders = db.getProviders(category, search);
+
+        adapter.notifyDataSetChanged();
+    }
+
+    // Services Screen
+    private void showServices() {
+
+        new AlertDialog.Builder(this)
+                .setTitle("Explore Services")
+                .setItems(categories, (dialog, which) -> {
+
+                    categorySpinner.setSelection(which);
+
+                    Toast.makeText(
+                            this,
+                            categories[which] + " Selected",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    // Bookings Screen
+    private void showBookings() {
+
+        ArrayList<String> bookings = db.getRequests();
+
+        if (bookings.isEmpty()) {
+
+            new AlertDialog.Builder(this)
+                    .setTitle("My Bookings")
+                    .setMessage("No bookings found. Please request a service first.")
+                    .setPositiveButton("OK", null)
+                    .show();
+
+            return;
+        }
+
+        ArrayAdapter<String> bookingAdapter =
+                new ArrayAdapter<>(
+                        this,
+                        android.R.layout.simple_list_item_1,
+                        bookings
+                );
+
+        ListView listView = new ListView(this);
+
+        listView.setAdapter(bookingAdapter);
+
+        new AlertDialog.Builder(this)
+                .setTitle("My Bookings")
+                .setView(listView)
+                .setPositiveButton("Close", null)
+                .show();
+    }
+
+    // Profile Screen
+    private void showProfile() {
+
+        String[] saved = db.getProfile();
+
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(30, 15, 30, 10);
+
+        EditText name = new EditText(this);
+        name.setHint("Full Name");
+        name.setText(saved[0]);
+
+        EditText phone = new EditText(this);
+        phone.setHint("Mobile Number");
+        phone.setInputType(InputType.TYPE_CLASS_PHONE);
+        phone.setText(saved[1]);
+
+        EditText email = new EditText(this);
+        email.setHint("Email Address");
+        email.setInputType(
+                InputType.TYPE_CLASS_TEXT |
+                InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS
+        );
+        email.setText(saved[2]);
+
+        EditText address = new EditText(this);
+        address.setHint("Your Address");
+        address.setText(saved[3]);
+
+        layout.addView(name);
+        layout.addView(phone);
+        layout.addView(email);
+        layout.addView(address);
+
+        new AlertDialog.Builder(this)
+                .setTitle("My Profile")
+                .setView(layout)
+                .setPositiveButton("Save Profile", (dialog, which) -> {
+
+                    String n = name.getText().toString().trim();
+                    String p = phone.getText().toString().trim();
+                    String e = email.getText().toString().trim();
+                    String a = address.getText().toString().trim();
+
+                    if (n.isEmpty() || p.isEmpty()) {
+
+                        Toast.makeText(
+                                this,
+                                "Name and Mobile Number are required",
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        return;
+                    }
+
+                    boolean result = db.saveProfile(n, p, e, a);
+
+                    Toast.makeText(
+                            this,
+                            result
+                                    ? "Profile Saved Successfully!"
+                                    : "Profile Save Failed!",
+                            Toast.LENGTH_SHORT
+                    ).show();
+                })
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    // Provider Adapter
+    private class ProviderAdapter extends BaseAdapter {
+
+        @Override
+        public int getCount() {
+            return currentProviders.size();
+        }
+
+        @Override
+        public Object getItem(int position) {
+            return currentProviders.get(position);
+        }
+
+        @Override
+        public long getItemId(int position) {
+            return position;
+        }
+
+        @Override
+        public View getView(
+                int position,
+                View convertView,
+                android.view.ViewGroup parent) {
+
+            View view = convertView;
+
+            if (view == null) {
+                view = getLayoutInflater().inflate(
+                        R.layout.item_provider,
+                        parent,
+                        false
+                );
+            }
+
+            Provider p = currentProviders.get(position);
+
+            TextView icon = view.findViewById(R.id.providerIcon);
+            TextView name = view.findViewById(R.id.providerName);
+            TextView info = view.findViewById(R.id.providerInfo);
+            TextView price = view.findViewById(R.id.providerPrice);
+
+            String emoji;
+
+            switch (p.category.toLowerCase()) {
+
+                case "plumber":
+                    emoji = "🔧";
+                    break;
+
+                case "electrician":
+                    emoji = "⚡";
+                    break;
+
+                case "tutor":
+                    emoji = "📚";
+                    break;
+
+                case "mechanic":
+                    emoji = "🔩";
+                    break;
+
+                case "cleaning":
+                    emoji = "🧹";
+                    break;
+
+                default:
+                    emoji = "🛠️";
+            }
+
+            icon.setText(emoji);
+            name.setText(p.name);
+            info.setText(p.category + " | " + p.location);
+            price.setText("Rs. " + p.price);
+
+            return view;
+        }
+    }
+
+    // Get Provider
+    private Provider getProviderAt(int position) {
+
+        if (position >= 0 && position < currentProviders.size()) {
+            return currentProviders.get(position);
+        }
+
+        return null;
+    }
+
+    // Provider Details
+    private void showProviderDetails(Provider p) {
+
+        new AlertDialog.Builder(this)
+                .setTitle(p.name)
+                .setMessage(
+                        "Category: " + p.category +
+                        "\nLocation: " + p.location +
+                        "\nStarting Price: Rs. " + p.price +
+                        "\n\n" + p.description
+                )
+                .setPositiveButton(
+                        "Request Service",
+                        (dialog, which) -> showRequestDialog(p)
+                )
+                .setNegativeButton("Close", null)
+                .show();
+    }
+
+    // Service Request
+    private void showRequestDialog(Provider p) {
+
+        EditText nameInput = new EditText(this);
+        nameInput.setHint("Enter your name");
+
+        new AlertDialog.Builder(this)
+                .setTitle("Service Request")
+                .setMessage("Request service from " + p.name)
+                .setView(nameInput)
+                .setPositiveButton("Submit", (dialog, which) -> {
+
+                    String name = nameInput.getText()
+                            .toString().trim();
+
+                    if (name.isEmpty()) {
+
+                        Toast.makeText(
+                                this,
+                                "Please enter your name",
+                                Toast.LENGTH_SHORT
+                        ).show();
+
+                        return;
+                    }
+
+                    boolean success = db.addRequest(
+                            p.id,
+                            name,
+                            p.category
+                    );
+
+                    Toast.makeText(
+                            this,
+                            success
+                                    ? "Request Submitted Successfully!"
+                                    : "Request Failed!",
+                            Toast.LENGTH_LONG
+                    ).show();
+                })
+                .setNegativeButton("Cancel", null)
+                .show();
+    }
+}
